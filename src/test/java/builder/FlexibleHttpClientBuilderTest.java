@@ -75,6 +75,33 @@ public class FlexibleHttpClientBuilderTest {
             // ignore
         }
     }
-
     
+    @Test
+    void shouldCreateClientHTTPProxyWithAuth() {
+        FlexibleHttpClientBuilder builder = new FlexibleHttpClientBuilder()
+            .withHttpProxyAuth("user", "password")
+            .withHttpProxy("proxy.example.com", 8080);
+        CloseableHttpClient client = builder.build();
+        assertNotNull(client, "Client with HTTP proxy + auth should not be null");
+        try {
+            client.close();
+        } catch (Exception e) {
+            // ignore
+        }
+    }
+
+    @Test
+    void shouldCreateClientWithSocksAndHTTPProxyWithAuth() {
+        FlexibleHttpClientBuilder builder = new FlexibleHttpClientBuilder()
+            .withSocksProxy("socks.example.com", 1080)
+            .withHttpProxyAuth("user", "password")
+            .withHttpProxy("proxy.example.com", 8080);
+        CloseableHttpClient client = builder.build();
+        assertNotNull(client, "Client with SOCKS and HTTP proxy + auth should not be null");
+        try {
+            client.close();
+        } catch (Exception e) {
+            // ignore
+        }
+    }
 }
