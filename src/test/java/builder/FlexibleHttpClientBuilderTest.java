@@ -104,4 +104,15 @@ public class FlexibleHttpClientBuilderTest {
             // ignore
         }
     }
+    
+    @Test
+    void shouldThrowExceptionWhenAuthWithoutProxy() {
+        FlexibleHttpClientBuilder builder = new FlexibleHttpClientBuilder()
+            .withHttpProxyAuth("user", "password");
+        IllegalStateException exception = assertThrows(
+            IllegalStateException.class,
+            builder::build
+        );
+        assertTrue(exception.getMessage().contains("Missing host and port for HttpProxy"));
+    }
 }
