@@ -10,6 +10,7 @@ import org.apache.http.HttpHost;
 import org.apache.http.auth.AuthScope;
 import org.apache.http.auth.UsernamePasswordCredentials;
 import org.apache.http.client.CredentialsProvider;
+import org.apache.http.client.config.CookieSpecs;
 import org.apache.http.client.config.RequestConfig;
 import org.apache.http.config.Registry;
 import org.apache.http.config.RegistryBuilder;
@@ -66,82 +67,77 @@ public class FlexibleHttpClientBuilder {
     
     public CloseableHttpClient build() {
         if (config == null){
-            config = RequestConfig.custom()
-                .setConnectTimeout(timeout)
-                .setSocketTimeout(timeout)
-                .setConnectionRequestTimeout(timeout)
-                .build();
+            config = buildDefaultRequestConfig(); 
         }
         HttpClientBuilder builder = HttpClients.custom().setDefaultRequestConfig(config);
-        
         try {
-            switch (connectionType()){
-                case DIRECT: 
-                    return builder.build();
-                
-                case SOCKS_PROXY:
-                    return builder
-                        .setConnectionManager(createSocksConnectionManager())
-                        .build();
-                
-                case HTTP_PROXY:
-                    return builder
-                        .setProxy(new HttpHost(httpProxyHost, httpProxyPort))
-                        .build();
-                    
-                case HTTP_PROXY_WITH_AUTH:
-                    return builder
-                        .setProxy(new HttpHost(httpProxyHost, httpProxyPort))
-                        .setDefaultCredentialsProvider(createCredentialsProvider())
-                        .build();
-                
-                case SOCKS_AND_HTTP_PROXY:
-                    return builder
-                        .setConnectionManager(createSocksConnectionManager())
-                        .setProxy(new HttpHost(httpProxyHost, httpProxyPort))
-                        .build();
-                    
-                case SOCKS_AND_HTTP_PROXY_WITH_AUTH:
-                    return builder
-                        .setConnectionManager(createSocksConnectionManager())
-                        .setProxy(new HttpHost(httpProxyHost, httpProxyPort))
-                        .setDefaultCredentialsProvider(createCredentialsProvider())
-                        .build();
-                    
-                default:
-                    throw new IllegalStateException("Unknown connection type: " + connectionType());
-            }     
+            ConnectionType connectionType = getConnectionType();
+            if (connectionType.hasSocks()){
+                builder.setConnectionManager(createSocksConnectionManager());
+            }
+            if (connectionType.hasHttp()){
+                builder.setProxy(new HttpHost(httpProxyHost, httpProxyPort));
+            }
+            if (connectionType.hasAuth()){
+                builder.setDefaultCredentialsProvider(createCredentialsProvider());
+            }
+            return builder.build();
         } catch (Exception ex) {
             throw new IllegalStateException("Failed to create HTTP client", ex);
         }
     }
     
-    private ConnectionType connectionType(){
-        if (socksProxyHost != null && socksProxyPort != null && httpProxyHost != null && httpProxyPort != null){
-            if (httpProxyUser != null && httpProxyPassword != null){
-                return ConnectionType.SOCKS_AND_HTTP_PROXY_WITH_AUTH;
-            } else {
-                return ConnectionType.SOCKS_AND_HTTP_PROXY;
-            }
-        } else if (socksProxyHost != null && socksProxyPort != null && (httpProxyHost == null || httpProxyPort == null)){
-            return ConnectionType.SOCKS_PROXY;
-        } else if ((socksProxyHost == null || socksProxyPort == null) && httpProxyHost != null && httpProxyPort != null){
-            if (httpProxyUser != null && httpProxyPassword != null){
-                return ConnectionType.HTTP_PROXY_WITH_AUTH;
-            } else {
-                return ConnectionType.HTTP_PROXY;
-            }
+    private ConnectionType getConnectionType(){
+        boolean hasSocks = socksProxyHost != null && socksProxyPort != null;
+        boolean hasHttp = httpProxyHost != null && httpProxyPort != null;
+        boolean hasAuth = httpProxyUser != null && httpProxyPassword != null;
+        
+        if (hasAuth && !hasHttp){
+            throw new IllegalStateException("Missing host and port for HttpProxy");
         }
+        
+        if (hasSocks && hasHttp){
+            return hasAuth ? ConnectionType.SOCKS_AND_HTTP_PROXY_WITH_AUTH 
+                : ConnectionType.SOCKS_AND_HTTP_PROXY;
+        } else if (hasSocks){
+            return ConnectionType.SOCKS_PROXY;
+        } else if (hasHttp){
+            return hasAuth ? ConnectionType.HTTP_PROXY_WITH_AUTH 
+                : ConnectionType.HTTP_PROXY;
+        }
+        
         return ConnectionType.DIRECT;
     }
 
     private enum ConnectionType {
-        DIRECT,
-        SOCKS_PROXY,
-        HTTP_PROXY,
-        HTTP_PROXY_WITH_AUTH,
-        SOCKS_AND_HTTP_PROXY,
-        SOCKS_AND_HTTP_PROXY_WITH_AUTH
+        DIRECT (false, false, false),
+        SOCKS_PROXY (true, false, false),
+        HTTP_PROXY (false, true, false),
+        HTTP_PROXY_WITH_AUTH (false, true, true),
+        SOCKS_AND_HTTP_PROXY (true, true, false), 
+        SOCKS_AND_HTTP_PROXY_WITH_AUTH (true, true, true);
+        
+        private final boolean socks;
+        private final boolean http;
+        private final boolean auth;
+        
+        private ConnectionType(boolean socks, boolean http, boolean auth){
+            this.socks = socks;
+            this.http = http;
+            this.auth = auth;
+        }
+        
+        private boolean hasSocks(){
+            return socks;
+        }
+        
+        private boolean hasHttp(){
+            return http;
+        }
+        
+        private boolean hasAuth(){
+            return auth;
+        }
     }
     
     private PoolingHttpClientConnectionManager createSocksConnectionManager() throws NoSuchAlgorithmException {
@@ -187,6 +183,14 @@ public class FlexibleHttpClientBuilder {
             new UsernamePasswordCredentials(httpProxyUser, httpProxyPassword)
         );
         return credentialsProvider;
+    }
+    
+    private RequestConfig buildDefaultRequestConfig() {
+        return RequestConfig.custom()
+            .setConnectTimeout(timeout)
+            .setSocketTimeout(timeout)
+            .setConnectionRequestTimeout(timeout)
+            .build();
     }
     
 }
