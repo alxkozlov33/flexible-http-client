@@ -83,7 +83,7 @@ public class FlexibleHttpClientBuilder {
             }
             return builder.build();
         } catch (Exception ex) {
-            throw new IllegalStateException("Failed to create HTTP client", ex);
+            throw new IllegalStateException("Failed to create HTTP client: " + ex.getMessage(), ex);
         }
     }
     
